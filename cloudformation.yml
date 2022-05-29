@@ -1,0 +1,158 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Description: 2 instances, 1 security group.
+
+Parameters:
+  KeyName:
+    Description: EC2 KeyPair to enable SSH access to the instance
+    Type: AWS::EC2::KeyPair::KeyName
+    ConstraintDescription: must be the name of an existing EC2 KeyPair.
+
+  InstanceType:
+    Description: WebServer EC2 instance type
+    Type: String
+    Default: t2.micro
+    AllowedValues: [t2.micro]
+    ConstraintDescription: must be a valid EC2 instance type.
+
+  SSHLocation:
+    Description: Range of IP addresses that we can use to SSH to the EC2 instances
+    Type: String
+    MinLength: 9
+    MaxLength: 18
+    Default: 0.0.0.0/0
+    AllowedPattern: (\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{1,2})
+    ConstraintDescription: must be a valid IP CIDR range of the form x.x.x.x/x.
+
+  LatestAmiId:
+    Type: String
+    Default: ami-00e7df8df28dfa791
+
+  VPCcidr:
+    Description: vpc cidr
+    Type: String
+
+Resources:
+  InstanceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Enable SSH access via port 22 and http access
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: !Ref "SSHLocation"
+        - IpProtocol: tcp
+          FromPort: 5000
+          ToPort: 5000
+          CidrIp: "0.0.0.0/0"
+        - IpProtocol: tcp
+          FromPort: 6379
+          ToPort: 6379
+          CidrIp: !Ref "VPCcidr"
+        - IpProtocol: tcp
+          FromPort: 6379
+          ToPort: 6379
+          CidrIp: !Ref "SSHLocation"
+  MyEC2Role:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action: sts:AssumeRole
+      Description: Role to provide access to ec2 create instance from the instance (for auto scaling)
+      Policies:
+        - PolicyName: EmbeddedInlinePolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: "cloudformation:*"
+                Resource: "*"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEC2FullAccess
+      RoleName: EC2FullAccess
+
+  MyInstanceProfile:
+    Type: "AWS::IAM::InstanceProfile"
+    Properties:
+      Path: "/"
+      Roles:
+        - Ref: "MyEC2Role"
+
+  Instance1:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: !Ref InstanceType
+      SecurityGroupIds:
+        - !Ref InstanceSecurityGroup
+      KeyName: !Ref KeyName
+      ImageId: !Ref LatestAmiId
+      IamInstanceProfile: !Ref MyInstanceProfile
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          # Sleep for the instance role might not be properly attached
+          sleep 10
+          sudo apt-get update
+          sudo apt-get install python3-pip -y
+          sudo apt-get install python3-flask -y
+          sudo apt update
+          sudo apt install python3-rq -y
+          sudo apt install redis-server -y
+          sudo pip3 install boto3
+          cd /home/ubuntu
+          git clone https://github.com/ofir2471/cc-ophir-idan-niv-hw2
+    DependsOn:
+      - MyEC2Role
+
+  Instance2:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: !Ref InstanceType
+      SecurityGroupIds:
+        - !Ref InstanceSecurityGroup
+      KeyName: !Ref KeyName
+      ImageId: !Ref LatestAmiId
+      IamInstanceProfile: !Ref MyInstanceProfile
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          # Sleep for the instance role might not be properly attached
+          sleep 10
+          sudo apt-get update
+          sudo apt-get install python3-pip -y
+          sudo apt-get install python3-flask -y
+          sudo apt update
+          sudo apt install python3-rq -y
+          sudo apt install redis-server -y
+          pip3 install boto3
+          cd /home/ubuntu
+          git clone https://github.com/ofir2471/cc-ophir-idan-niv-hw2
+    DependsOn:
+      - MyEC2Role
+
+Outputs:
+  InstanceId1:
+    Description: InstanceId Instance 1
+    Value: !Ref "Instance1"
+  Instance1IP:
+    Description: IP Instance 1
+    Value: !GetAtt [Instance1, PublicIp]
+  Instance1PrivateIp:
+    Description: IP Instance 1
+    Value: !GetAtt [Instance1, PrivateIp]
+  InstanceId2:
+    Description: InstanceId Instance 2
+    Value: !Ref "Instance2"
+  Instance2IP:
+    Description: IP Instance 2
+    Value: !GetAtt [Instance2, PublicIp]
+  Instance2PrivateIp:
+    Description: IP Instance 2
+    Value: !GetAtt [Instance2, PrivateIp]
