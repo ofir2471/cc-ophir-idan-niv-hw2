@@ -44,8 +44,7 @@ def get_redis(redis_host):
 
 
 def get_finished_local():
-    redis_queue, redis_conn = get_remote_redis_queue_connection(
-        '127.0.0.1')
+    redis_queue, redis_conn = get_redis('127.0.0.1')
     return get_jobs_by_ids(
         remote_redis_queue.finished_job_registry.get_job_ids(),
         redis_conn
